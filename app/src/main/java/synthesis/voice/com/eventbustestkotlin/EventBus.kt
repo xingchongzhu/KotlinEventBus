@@ -14,7 +14,8 @@ import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 
 class EventBus {
-    private var cacheMap:HashMap<Object,List<SubscrbileMethod>>? = null
+    val Tag : String = "EventBus"
+    private var cacheMap:HashMap<Object,ArrayList<SubscrbileMethod>>? = null
     //private val cache = java.util.HashMap<Any, List<SubscrbileMethod>>()
     private var handler: Handler? = null
     companion object {
@@ -37,11 +38,17 @@ class EventBus {
     }
 
     fun register(item: Object){
-       var list : List<SubscrbileMethod>? = cacheMap?.get(item)
+       var list : ArrayList<SubscrbileMethod>? = cacheMap?.get(item)
         if(list == null){
             list = findSubscrbileMethods(item)
             list?.let { cacheMap?.put(item, it) }
         }
+    }
+
+    fun unregister(item: Object){
+        var list : ArrayList<SubscrbileMethod>? = cacheMap?.get(item)
+        list?.clear()
+        cacheMap?.remove(item)
     }
 
     fun post(bean:EventBean){
@@ -50,10 +57,10 @@ class EventBus {
             var vm:Map.Entry<Object,List<SubscrbileMethod>> = it
             it.value.forEach {
                 val subscrbileMethod: SubscrbileMethod = it
-                //p安定对象类型是否为之类
+                //判断当前类型与传入类型关系
                 if(it.type!!.isAssignableFrom(bean.javaClass)){
                     when(subscrbileMethod.mThreadMod){
-                        ThreadMode.MAIN->
+                         ThreadMode.MAIN->{
                             if(Looper.myLooper() == Looper.getMainLooper()){
                                 invoke(it,vm,bean)
                             }else{
@@ -61,13 +68,19 @@ class EventBus {
                                     invoke(it,vm,bean)
                                 })
                             }
-                        ThreadMode.BACKGROUND ->
+                        }
+                        ThreadMode.BACKGROUND ->{
                             if(Looper.myLooper() != Looper.getMainLooper()){
                                 invoke(it,vm,bean)
                             }else {
-
+                                GlobalScope.launch(){
+                                    invoke(it,vm,bean)
+                                }
                             }
-
+                        }
+                        else->{
+                            Log.d(Tag,"can't match")
+                        }
                     }
                 }
             }
@@ -76,11 +89,12 @@ class EventBus {
 
     private fun invoke(subscrbileMethod: SubscrbileMethod, vm: Map.Entry<Object, List<SubscrbileMethod>>, bean: EventBean) {
         val method = subscrbileMethod.mMeath
+        //调用注解方法
         method?.invoke(vm.key, bean)
     }
 
 
-    fun findSubscrbileMethods(item:Object):List<SubscrbileMethod>{
+    fun findSubscrbileMethods(item:Object):ArrayList<SubscrbileMethod>{
         var list : ArrayList<SubscrbileMethod> = ArrayList()
         //找到类对象
         var clazz : Class<*> = item.`class`
@@ -112,7 +126,6 @@ class EventBus {
             }
             clazz = clazz.superclass
         }
-
         return list
     }
 }
